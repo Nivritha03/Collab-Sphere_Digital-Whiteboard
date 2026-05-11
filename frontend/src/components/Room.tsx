@@ -58,11 +58,10 @@ const NameGate = ({ userColor, onEnter }: { userColor: string; onEnter: (name: s
                         maxLength={24}
                         onChange={(e) => { setDraft(e.target.value); setError(false); }}
                         onKeyDown={(e) => e.key === 'Enter' && submit()}
-                        className={`w-full px-6 py-4 bg-[var(--bg-color)]/60 border text-[var(--text-color)] rounded-2xl focus:outline-none focus:ring-4 transition-all font-bold text-lg placeholder:opacity-30 ${
-                            error
-                                ? 'border-red-400 focus:ring-red-400/20'
-                                : 'border-[var(--border-color)] focus:ring-[var(--accent-primary)]/30 focus:border-[var(--accent-primary)]/60'
-                        }`}
+                        className={`w-full px-6 py-4 bg-[var(--bg-color)]/60 border text-[var(--text-color)] rounded-2xl focus:outline-none focus:ring-4 transition-all font-bold text-lg placeholder:opacity-30 ${error
+                            ? 'border-red-400 focus:ring-red-400/20'
+                            : 'border-[var(--border-color)] focus:ring-[var(--accent-primary)]/30 focus:border-[var(--accent-primary)]/60'
+                            }`}
                     />
                     {error && <p className="text-red-400 text-xs font-bold px-1">⚠ Please enter your name</p>}
                 </div>
@@ -108,7 +107,7 @@ const Room = () => {
         connect(roomId);
 
         // Fetch version history
-        fetch(`http://localhost:8080/api/version/${roomId}`)
+        fetch(`https://collab-sphere-digitalwhiteboard.onrender.com/api/version/${roomId}`)
             .then(res => res.json())
             .then(data => {
                 console.log("History:", data);
@@ -116,7 +115,7 @@ const Room = () => {
                 if (data.length > 0) {
                     const latest = data[0]; // only latest snapshot
                     const elements = JSON.parse(latest.snapshot);
-                    
+
                     if (Array.isArray(elements)) {
                         elements.forEach((el: any) => {
                             useWhiteboardStore.getState()._applyPoint(el);
