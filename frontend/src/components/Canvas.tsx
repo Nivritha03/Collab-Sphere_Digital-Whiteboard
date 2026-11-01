@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useWhiteboardStore, fromVirX, fromVirY } from '../store/useWhiteboardStore';
 import { useThemeStore } from '../store/useThemeStore';
 
@@ -7,6 +7,14 @@ const Canvas: React.FC = () => {
     const bufferRef = useRef<HTMLCanvasElement | null>(null);
     const lastRenderedCount = useRef(0);
     const animFrameRef = useRef<number | null>(null);
+
+    const [textInput, setTextInput] = useState<{
+        visible: boolean;
+        x: number;
+        y: number;
+        val: string;
+    } | null>(null);
+    const textInputRef = useRef<HTMLInputElement>(null);
 
     const {
         activeTool, currentColor, currentSize,
@@ -80,8 +88,10 @@ const Canvas: React.FC = () => {
             ctx.stroke();
         } else if (first.tool === 'text') {
             const last = stroke.points[stroke.points.length - 1];
-            ctx.font = `bold ${last.size * 5}px 'Outfit', sans-serif`;
+            const fontSize = Math.max(16, (last.size || 4) * 5);
+            ctx.font = `600 ${fontSize}px 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
             ctx.fillStyle = color;
+            ctx.textBaseline = 'top';
             ctx.shadowBlur = 0;
             ctx.fillText(last.text || '', fromVirX(last.x0, width), fromVirY(last.y0, height));
         } else {
@@ -253,6 +263,31 @@ const Canvas: React.FC = () => {
         }
     };
 
+    const handleCommitText = () => {
+        if (!textInput || !textInput.val.trim()) {
+            setTextInput(null);
+            return;
+        }
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        sendDraw({
+            tool: 'text',
+            x0: textInput.x,
+            y0: textInput.y,
+            x1: textInput.x,
+            y1: textInput.y,
+            color: currentColor,
+            size: currentSize,
+            strokeId: currentStrokeId,
+            isFinished: true,
+            text: textInput.val.trim()
+        }, canvas.width, canvas.height);
+
+        newStroke();
+        setTextInput(null);
+    };
+
     const finishDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
         if (!isDrawing.current) return;
         isDrawing.current = false;
@@ -262,19 +297,16 @@ const Canvas: React.FC = () => {
         if (!canvas) return;
 
         if (activeTool === 'text') {
-            const text = window.prompt('Enter your text:');
-            if (text) {
-                sendDraw({
-                    tool: 'text',
-                    x0: pos.x, y0: pos.y,
-                    x1: pos.x, y1: pos.y,
-                    color: currentColor,
-                    size: currentSize,
-                    strokeId: currentStrokeId,
-                    isFinished: true,
-                    text
-                }, canvas.width, canvas.height);
-            }
+            // Open in-place input overlay right where user clicked
+            setTextInput({
+                visible: true,
+                x: pos.x,
+                y: pos.y,
+                val: ''
+            });
+            setTimeout(() => {
+                textInputRef.current?.focus();
+            }, 50);
         } else {
             sendDraw({
                 tool: activeTool,
@@ -289,17 +321,54 @@ const Canvas: React.FC = () => {
         }
     };
 
+    const fontSize = Math.max(16, (currentSize || 4) * 5);
+
     return (
-        <canvas
-            ref={canvasRef}
-            onPointerDown={startDrawing}
-            onPointerMove={onMove}
-            onPointerUp={finishDrawing}
-            onPointerCancel={finishDrawing}
-            className={`absolute top-0 left-0 w-full h-full touch-none ${
-                activeTool === 'hand' ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
-            }`}
-        />
+        <div className="relative w-full h-full">
+            <canvas
+                ref={canvasRef}
+                onPointerDown={startDrawing}
+                onPointerMove={onMove}
+                onPointerUp={finishDrawing}
+                onPointerCancel={finishDrawing}
+                className={`absolute top-0 left-0 w-full h-full touch-none ${
+                    activeTool === 'hand' ? 'cursor-grab active:cursor-grabbing' : activeTool === 'text' ? 'cursor-text' : 'cursor-crosshair'
+                }`}
+            />
+
+            {/* In-Place Interactive Text Input Box */}
+            {textInput?.visible && (
+                <div
+                    className="absolute z-30"
+                    style={{
+                        left: `${textInput.x}px`,
+                        top: `${textInput.y}px`,
+                    }}
+                >
+                    <input
+                        ref={textInputRef}
+                        type="text"
+                        value={textInput.val}
+                        placeholder="Type text..."
+                        onChange={(e) => setTextInput({ ...textInput, val: e.target.value })}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                handleCommitText();
+                            } else if (e.key === 'Escape') {
+                                setTextInput(null);
+                            }
+                        }}
+                        onBlur={handleCommitText}
+                        style={{
+                            color: currentColor,
+                            fontSize: `${fontSize}px`,
+                            lineHeight: 1,
+                        }}
+                        className="bg-black/75 dark:bg-slate-900/90 text-white border-2 border-indigo-500 rounded-lg px-2.5 py-1 outline-none shadow-2xl font-semibold backdrop-blur-md min-w-[140px] max-w-[80vw]"
+                    />
+                </div>
+            )}
+        </div>
     );
 };
 

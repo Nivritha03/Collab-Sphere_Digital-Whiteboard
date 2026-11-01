@@ -61,7 +61,8 @@ export const authService = {
         }
 
         if (!res.ok) {
-            throw new Error(data.message || data.error || (res.status === 400 ? 'An account with this email already exists or invalid details.' : 'Failed to sign up'));
+            const errText = data.message || data.error;
+            throw new Error(errText || (res.status === 400 ? 'An account with this email already exists or invalid details.' : 'Failed to sign up'));
         }
 
         const authUser: UserAuth = {
@@ -96,7 +97,8 @@ export const authService = {
         }
 
         if (!res.ok) {
-            throw new Error(data.message || data.error || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign in'));
+            const errText = data.message || data.error;
+            throw new Error(errText || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign in'));
         }
 
         const authUser: UserAuth = {

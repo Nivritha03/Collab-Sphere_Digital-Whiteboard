@@ -25,7 +25,9 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Failed to sign up", "message", "Failed to sign up"));
+            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "Failed to sign up";
+            return ResponseEntity.internalServerError().body(Map.of("error", msg, "message", msg));
         }
     }
 
@@ -37,7 +39,9 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Failed to sign in", "message", "Failed to sign in"));
+            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "Failed to sign in";
+            return ResponseEntity.internalServerError().body(Map.of("error", msg, "message", msg));
         }
     }
 
