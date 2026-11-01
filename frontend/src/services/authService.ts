@@ -41,11 +41,16 @@ export const authService = {
 
     async signUp(username: string, email: string, password: string): Promise<UserAuth> {
         const { apiUrl } = getBackendUrls();
-        const res = await fetch(`${apiUrl}/api/auth/signup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email, password }),
-        });
+        let res: Response;
+        try {
+            res = await fetch(`${apiUrl}/api/auth/signup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password }),
+            });
+        } catch (fetchErr: any) {
+            throw new Error(`Cannot connect to server at ${apiUrl}. Please ensure the backend is running.`);
+        }
 
         const rawText = await res.text();
         let data: any = {};
@@ -56,7 +61,7 @@ export const authService = {
         }
 
         if (!res.ok) {
-            throw new Error(data.message || data.error || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign up'));
+            throw new Error(data.message || data.error || (res.status === 400 ? 'An account with this email already exists or invalid details.' : 'Failed to sign up'));
         }
 
         const authUser: UserAuth = {
@@ -71,11 +76,16 @@ export const authService = {
 
     async signIn(email: string, password: string): Promise<UserAuth> {
         const { apiUrl } = getBackendUrls();
-        const res = await fetch(`${apiUrl}/api/auth/signin`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
-        });
+        let res: Response;
+        try {
+            res = await fetch(`${apiUrl}/api/auth/signin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+        } catch (fetchErr: any) {
+            throw new Error(`Cannot connect to server at ${apiUrl}. Please ensure the backend is running.`);
+        }
 
         const rawText = await res.text();
         let data: any = {};

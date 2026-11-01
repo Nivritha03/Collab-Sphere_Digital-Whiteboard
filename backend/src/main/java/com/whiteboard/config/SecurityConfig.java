@@ -10,10 +10,12 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 	    http
+	        .cors(org.springframework.security.config.Customizer.withDefaults())
 	        .csrf(csrf -> csrf.disable())
 	        .headers(headers -> headers.frameOptions(frame -> frame.disable()))
 	        .authorizeHttpRequests(auth -> auth
-	            .requestMatchers("/ws/**").permitAll()  // ✅ ADD THIS LINE
+	            .requestMatchers("/ws/**").permitAll()
+	            .requestMatchers("/api/**").permitAll()
 	            .anyRequest().permitAll()
 	        );
 
