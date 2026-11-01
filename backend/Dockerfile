@@ -1,17 +1,30 @@
-# Dockerfile for Spring Boot Production Deployment
-FROM eclipse-temurin:17-jdk-jammy as builder
-WORKDIR /opt/app
-COPY .mvn/ .mvn
-COPY mvnw pom.xml ./
-RUN ./mvnw dependency:go-offline
+# Use Maven image to build the application
+FROM maven:3.9.11-eclipse-temurin-21 AS build
 
-COPY ./src ./src
-RUN ./mvnw clean package -DskipTests
+# Set working directory
+WORKDIR /app
 
-FROM eclipse-temurin:17-jre-jammy
-WORKDIR /opt/app
+# Copy pom.xml and download dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Copy source code
+COPY src ./src
+
+# Build the application (skip tests for faster build)
+RUN mvn clean package -DskipTests
+
+# Use JDK image to run the application
+FROM eclipse-temurin:21-jre
+
+# Set working directory
+WORKDIR /app
+
+# Copy the jar file from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose port 8080
 EXPOSE 8080
-COPY --from=builder /opt/app/target/*.jar /opt/app/app.jar
 
-ENV SPRING_PROFILES_ACTIVE=prod
-ENTRYPOINT ["java", "-jar", "/opt/app/app.jar"]
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
