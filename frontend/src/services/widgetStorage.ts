@@ -16,29 +16,32 @@ export interface WidgetRoomData {
 const WIDGET_STORAGE_KEY = 'collabsphere_active_widget';
 const ACTIVE_ROOM_KEY = 'collabsphere_current_room';
 
-import { registerPlugin } from '@capacitor/core';
-
-interface NativeWidgetPlugin {
-    updateWidgetPreview(options: { previewDataUrl: string; roomId: string; status: string }): Promise<{ success: boolean }>;
-    stopSharingWidget(): Promise<{ success: boolean }>;
-}
-
-const NativeWidgetBridge = registerPlugin<NativeWidgetPlugin>('NativeWidgetBridge');
+// Safe runtime bridge for native Capacitor environments (iOS/Android)
+// Prevents missing module build errors on web platforms like Vercel/Netlify
+const getNativeWidgetBridge = () => {
+    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+        try {
+            return (window as any).Capacitor?.Plugins?.NativeWidgetBridge || null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
 
 export const saveWidgetData = (data: WidgetRoomData): void => {
     try {
         localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data));
         localStorage.setItem(ACTIVE_ROOM_KEY, data.roomId);
 
-        // Bridge to native Android AppWidget if running natively
-        if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-            if (data.previewDataUrl) {
-                NativeWidgetBridge.updateWidgetPreview({
-                    previewDataUrl: data.previewDataUrl,
-                    roomId: data.roomId,
-                    status: data.connectionState
-                }).catch(() => {});
-            }
+        // Bridge to native Android/iOS widget when running natively
+        const bridge = getNativeWidgetBridge();
+        if (bridge && data.previewDataUrl) {
+            bridge.updateWidgetPreview?.({
+                previewDataUrl: data.previewDataUrl,
+                roomId: data.roomId,
+                status: data.connectionState
+            })?.catch?.(() => {});
         }
     } catch (e) {
         console.warn('Failed to save widget data to localStorage', e);
@@ -59,8 +62,9 @@ export const clearWidgetData = (): void => {
         localStorage.removeItem(WIDGET_STORAGE_KEY);
         localStorage.removeItem(ACTIVE_ROOM_KEY);
 
-        if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-            NativeWidgetBridge.stopSharingWidget().catch(() => {});
+        const bridge = getNativeWidgetBridge();
+        if (bridge) {
+            bridge.stopSharingWidget?.()?.catch?.(() => {});
         }
     } catch (e) {
         console.warn('Failed to clear widget data', e);
