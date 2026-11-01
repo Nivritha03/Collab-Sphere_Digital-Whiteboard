@@ -64,8 +64,9 @@ export const authService = {
             }
 
             if (!res.ok) {
+                // If backend returned 400 or other status, parse exact error
                 const errText = data.message || data.error;
-                throw new Error(errText || 'An account with this email already exists');
+                throw new Error(errText || 'Unable to create account. Please check your details.');
             }
 
             const authUser: UserAuth = {
@@ -79,13 +80,30 @@ export const authService = {
             localStorage.setItem('collab_sphere_registered_users', JSON.stringify(existingUsers));
             return authUser;
         } catch (backendErr: any) {
-            // If backend explicitly rejected with duplicate email or validation error, re-throw that error
-            if (backendErr.message && !backendErr.message.includes('Cannot connect') && !backendErr.message.includes('Failed to fetch')) {
+            const msg = backendErr?.message || '';
+            // If the error message was an explicit validation message from our code or backend, keep it!
+            const isNetworkFailure = msg.includes('Failed to fetch') || 
+                                     msg.includes('NetworkError') || 
+                                     msg.includes('Cannot connect') ||
+                                     msg.includes('Load failed');
+
+            if (!isNetworkFailure && msg) {
                 throw backendErr;
             }
 
-            // Fallback for standalone / cloud Vercel deployments when backend is offline
+            // Standalone / offline / cloud fallback when backend server is unreachable
             if (existingUsers[cleanEmail]) {
+                // If this email already exists in local storage and passwords match, log them in or ask to sign in
+                if (existingUsers[cleanEmail].password === password) {
+                    const fallbackUser: UserAuth = {
+                        token: 'AUTH-LOCAL-' + Math.random().toString(36).substring(2),
+                        username: existingUsers[cleanEmail].username || cleanUsername,
+                        email: cleanEmail,
+                        color: existingUsers[cleanEmail].color || '#6366f1',
+                    };
+                    this.setCurrentUser(fallbackUser);
+                    return fallbackUser;
+                }
                 throw new Error('An account with this email already exists. Please switch to Sign In.');
             }
 
