@@ -60,8 +60,8 @@ Experience seamless collaborative creativity anywhere with Collab-Sphere.
 
 ```text
 Demo Credentials for App Review:
-- Email: reviewer@collabsphere.com
-- Password: ReviewerSecure2026!
+- Email: <CREATE_DEDICATED_APP_REVIEWER_EMAIL_IN_YOUR_DASHBOARD>
+- Password: <CREATE_SECURE_ONE_TIME_REVIEWER_PASSWORD>
 
 Testing Instructions:
 1. Sign in using the credentials provided above or register a new test account.

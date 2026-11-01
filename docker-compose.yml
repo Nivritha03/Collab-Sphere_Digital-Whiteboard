@@ -8,8 +8,8 @@ services:
     environment:
       MYSQL_DATABASE: collabspheredb
       MYSQL_USER: collabsphere
-      MYSQL_PASSWORD: ${DB_PASSWORD:-CollabSphereSecure2026!}
-      MYSQL_ROOT_PASSWORD: ${ROOT_PASSWORD:-CollabSphereRoot2026!}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      MYSQL_ROOT_PASSWORD: ${ROOT_PASSWORD:?ROOT_PASSWORD required}
     ports:
       - "3306:3306"
     volumes:
@@ -33,7 +33,7 @@ services:
     environment:
       url: jdbc:mysql://collabsphere-db:3306/collabspheredb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       username: collabsphere
-      password: ${DB_PASSWORD:-CollabSphereSecure2026!}
+      password: ${DB_PASSWORD:?DB_PASSWORD required}
       driverClassName: com.mysql.cj.jdbc.Driver
 
 volumes:
