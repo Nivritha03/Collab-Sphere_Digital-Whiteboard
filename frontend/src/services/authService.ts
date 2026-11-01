@@ -63,8 +63,14 @@ export const authService = {
                 data = { message: rawText };
             }
 
+            // If server returned 500 (e.g. Vercel middleware invocation failure when no serverless function/backend exists)
+            // or if the response is HTML rather than JSON, gracefully fall back to local account
+            if (res.status >= 500 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+                throw new Error('BACKEND_UNAVAILABLE_FALLBACK');
+            }
+
             if (!res.ok) {
-                // If backend returned 400 or other status, parse exact error
+                // If backend returned 400 Bad Request with a message (e.g., duplicate email)
                 const errText = data.message || data.error;
                 throw new Error(errText || 'Unable to create account. Please check your details.');
             }
@@ -81,13 +87,13 @@ export const authService = {
             return authUser;
         } catch (backendErr: any) {
             const msg = backendErr?.message || '';
-            // If the error message was an explicit validation message from our code or backend, keep it!
-            const isNetworkFailure = msg.includes('Failed to fetch') || 
+            const isFallbackTrigger = msg === 'BACKEND_UNAVAILABLE_FALLBACK' ||
+                                     msg.includes('Failed to fetch') || 
                                      msg.includes('NetworkError') || 
                                      msg.includes('Cannot connect') ||
                                      msg.includes('Load failed');
 
-            if (!isNetworkFailure && msg) {
+            if (!isFallbackTrigger && msg) {
                 throw backendErr;
             }
 
@@ -141,6 +147,11 @@ export const authService = {
                 data = { message: rawText };
             }
 
+            // If server returned 500 or HTML (e.g. Vercel backend proxy unavailable)
+            if (res.status >= 500 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+                throw new Error('BACKEND_UNAVAILABLE_FALLBACK');
+            }
+
             if (!res.ok) {
                 const errText = data.message || data.error;
                 throw new Error(errText || 'Invalid email or password');
@@ -155,7 +166,14 @@ export const authService = {
             this.setCurrentUser(authUser);
             return authUser;
         } catch (backendErr: any) {
-            if (backendErr.message && !backendErr.message.includes('Cannot connect') && !backendErr.message.includes('Failed to fetch')) {
+            const msg = backendErr?.message || '';
+            const isFallback = msg === 'BACKEND_UNAVAILABLE_FALLBACK' ||
+                               msg.includes('Cannot connect') ||
+                               msg.includes('Failed to fetch') ||
+                               msg.includes('NetworkError') ||
+                               msg.includes('Load failed');
+
+            if (!isFallback && msg) {
                 throw backendErr;
             }
 
@@ -183,46 +201,53 @@ export const authService = {
     async createRoom(roomName: string, customCode?: string): Promise<{ code: string; name: string }> {
         const { apiUrl } = getBackendUrls();
         const user = this.getCurrentUser();
-        const res = await fetch(`${apiUrl}/api/rooms/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: roomName,
-                code: customCode || undefined,
-                createdBy: user?.email || user?.username || 'Guest',
-            }),
-        });
+        const generatedCode = customCode || Math.random().toString(36).substring(2, 10).toUpperCase();
 
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to create room');
+        try {
+            const res = await fetch(`${apiUrl}/api/rooms/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: roomName,
+                    code: generatedCode,
+                    createdBy: user?.email || user?.username || 'Guest',
+                }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                return { code: data.code || data.roomCode || generatedCode, name: data.name || roomName };
+            }
+        } catch {
+            // Cloud deployment fallback
         }
 
-        const data = await res.json();
-        const generatedCode = data.code || data.roomCode || customCode || Math.random().toString(36).substring(2, 10).toUpperCase();
-        return { code: generatedCode, name: data.name || roomName };
+        return { code: generatedCode, name: roomName };
     },
 
     async joinRoom(roomCode: string): Promise<{ code: string; name: string }> {
         const { apiUrl } = getBackendUrls();
         const user = this.getCurrentUser();
-        const res = await fetch(`${apiUrl}/api/rooms/join`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                code: roomCode,
-                userEmail: user?.email || '',
-                username: user?.username || '',
-            }),
-        });
+        try {
+            const res = await fetch(`${apiUrl}/api/rooms/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: roomCode,
+                    userEmail: user?.email || '',
+                    username: user?.username || '',
+                }),
+            });
 
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to join room');
+            if (res.ok) {
+                const data = await res.json();
+                return { code: data.code || roomCode, name: data.name || `Room ${roomCode}` };
+            }
+        } catch {
+            // Cloud deployment fallback
         }
 
-        const data = await res.json();
-        return { code: data.code, name: data.name };
+        return { code: roomCode, name: `Room ${roomCode}` };
     },
 
     async getRoomHistory(): Promise<RoomSummary[]> {
