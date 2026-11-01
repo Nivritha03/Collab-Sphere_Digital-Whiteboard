@@ -1,9 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">CollabSphere</string>
-    <string name="title_activity_main">CollabSphere</string>
-    <string name="package_name">com.collabsphere.app</string>
-    <string name="custom_url_scheme">com.collabsphere.app</string>
-    <string name="widget_name">Collab-Sphere Whiteboard</string>
-    <string name="widget_description">Shows real-time shared whiteboard drawing live directly on your home screen.</string>
-</resources>

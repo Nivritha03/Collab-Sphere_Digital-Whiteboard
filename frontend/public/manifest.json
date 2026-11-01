@@ -1,7 +1,7 @@
 {
   "name": "CollabSphere | Real-time Creative Workspace",
   "short_name": "CollabSphere",
-  "description": "Always-Live Collaborative Whiteboard with Mobile Home-Screen & Lock Screen Widgets",
+  "description": "Always-Live Collaborative Whiteboard with Instant Real-Time Sync",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",

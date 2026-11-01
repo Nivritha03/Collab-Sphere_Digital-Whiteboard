@@ -1,20 +1,14 @@
 # Collab-Sphere Digital Whiteboard
-## Always-Live Collaborative Whiteboard with Mobile Home-Screen Widgets
+## Always-Live Collaborative Whiteboard with Instant Real-Time Sync
 
-Collab-Sphere is a full-stack, real-time collaborative digital whiteboard application supporting multi-device phone and tablet synchronization, persistent server rooms, and live mobile home-screen widget previews matching modern iOS & Android 14 widgets.
+Collab-Sphere is a full-stack, real-time collaborative digital whiteboard application supporting multi-device synchronization, persistent server rooms, room history management, and real-time STOMP drawing.
 
 ---
 
-## 📱 Mobile Home-Screen Widget & Real-time Collaboration Architecture
+## 🎨 Real-time Collaboration Architecture
 
-As illustrated in the system concept:
-- **Two or more people join the same whiteboard room** across separate mobile devices or tabs.
+- **Two or more people join the same whiteboard room** across separate devices or tabs.
 - **Incremental real-time drawing & editing**: Vector stroke coordinates are synchronized over WebSockets without full-frame re-uploads.
-- **Home-Screen Live Preview Widget**: When returning to the phone home screen, the widget displays a cached live whiteboard preview, active participant count, room ID, and live connection status.
-- **Control Menu & Quick Actions**:
-  - `Open Whiteboard`: Deep-links straight back to the room.
-  - `Preferences`: Toggles background sync, HD preview, and manual refresh.
-  - `Stop Sharing`: Explicitly detaches and cleans up the home-screen preview without destroying server board history.
 - **Persistent Storage & Disconnection Tolerance**: Server snapshots survive client closures and creator departure. Rooms remain available indefinitely.
 
 ---
@@ -87,10 +81,7 @@ As illustrated in the system concept:
 3. **On Phone 2**:
    - Scan the QR code or navigate to `http://<your-computer-ip>:5173/room/<room-id>`.
    - Enter your name and click **Join Room**.
-4. **Draw simultaneously**: Both phones see strokes, shapes, text, eraser, and active cursor positions in real time.
-5. **View Home Screen Live Widgets**:
-   - Navigate to `/widget-preview` or tap **Widgets** in the top bar to inspect Phone 1 (iOS style) and Phone 2 (Android 14 style) home screens with live previews and the Quick Actions control menu.
-   - Tap **Stop Sharing** in the control menu to stop widget synchronization.
+4. **Draw simultaneously**: Both devices see strokes, shapes, text, eraser, and active cursor positions in real time.
 
 ---
 
@@ -98,7 +89,7 @@ As illustrated in the system concept:
 
 ### REST APIs
 - `GET /api/whiteboard/{room}`: Fetch all stored stroke elements for the room.
-- `GET /api/whiteboard/{room}/state`: Unified DTO returning elements, latest snapshot, participant count, and last updated timestamp for widgets.
+- `GET /api/whiteboard/{room}/state`: Unified state DTO returning elements, latest snapshot, and participant count.
 - `GET /api/version/{room}`: Fetch historical snapshots for version rewinding.
 
 ### WebSocket Destinations
