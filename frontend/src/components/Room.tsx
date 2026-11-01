@@ -8,12 +8,11 @@ import Toolbar from './Toolbar';
 import ThemeToggle from './ThemeToggle';
 import CursorOverlay from './CursorOverlay';
 import HistorySidebar from './HistorySidebar';
-import { Share2, Users, WifiOff, Home, Copy, X, Check, ArrowRight, Smartphone, Download } from 'lucide-react';
+import { Share2, Users, WifiOff, Home, Copy, X, Check, ArrowRight, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { getBackendUrls } from '../config/apiConfig';
-import { saveWidgetData, getWidgetData, clearWidgetData } from '../services/widgetStorage';
 import { authService } from '../services/authService';
 
 const { useState, useEffect, useRef } = React;
@@ -114,10 +113,6 @@ const Room = () => {
     });
     const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
     const [roomDetails, setRoomDetails] = useState<{ name: string; createdBy: string } | null>(null);
-    const [isLiveActive, setIsLiveActive] = useState<boolean>(() => {
-        const data = getWidgetData();
-        return !!(data?.roomId && roomId && data.roomId === roomId && data?.isSharingActive === true);
-    });
 
     // Fetch room name and creator
     useEffect(() => {
@@ -132,46 +127,6 @@ const Room = () => {
             })
             .catch(() => {});
     }, [roomId]);
-
-    // Update Widget state cache periodically when strokes or users change
-    const { strokeOrder } = useWhiteboardStore();
-    useEffect(() => {
-        if (!roomId) return;
-        
-        // Capture high-contrast thumbnail preview from canvas with proper background
-        const canvas = document.querySelector('canvas');
-        let previewDataUrl: string | undefined = undefined;
-        if (canvas && canvas.width > 0 && canvas.height > 0) {
-            try {
-                const thumb = document.createElement('canvas');
-                thumb.width = 400;
-                thumb.height = 250;
-                const tctx = thumb.getContext('2d');
-                if (tctx) {
-                    // Dark theme background to match the drawing canvas
-                    tctx.fillStyle = theme === 'light' ? '#f8fafc' : '#0a0a0f';
-                    tctx.fillRect(0, 0, thumb.width, thumb.height);
-                    tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
-                    previewDataUrl = thumb.toDataURL('image/png', 0.8);
-                }
-            } catch { }
-        }
-
-        const displayName = roomDetails?.name || `Board #${roomId ? roomId.substring(0, Math.min(6, roomId.length)) : ''}`;
-
-        saveWidgetData({
-            roomId: roomId || '',
-            roomName: displayName,
-            userName: userName || 'You',
-            userColor,
-            lastUpdated: Date.now(),
-            previewDataUrl,
-            strokeCount: strokeOrder.length,
-            participantCount: Math.max(1, Object.keys(activeUsers).length),
-            connectionState: isConnected ? 'Connected' : 'Offline',
-            isSharingActive: isLiveActive
-        });
-    }, [roomId, strokeOrder.length, isConnected, activeUsers, userName, userColor, theme, roomDetails?.name, isLiveActive]);
 
     // Generate QR code whenever share modal opens
     useEffect(() => {
@@ -244,51 +199,6 @@ const Room = () => {
     };
 
     const userCount = Math.max(1, Object.keys(activeUsers).length);
-
-    const [showWidgetToast, setShowWidgetToast] = useState(false);
-
-    // One-Click: Add Live Whiteboard to Screen (True 1-Click: Stays right on canvas, activates live background widget session)
-    const handleAddLiveWhiteboard = () => {
-        const canvas = document.querySelector('canvas');
-        let previewDataUrl: string | undefined = undefined;
-        if (canvas && canvas.width > 0 && canvas.height > 0) {
-            try {
-                const thumb = document.createElement('canvas');
-                thumb.width = 400;
-                thumb.height = 250;
-                const tctx = thumb.getContext('2d');
-                if (tctx) {
-                    tctx.fillStyle = theme === 'light' ? '#f8fafc' : '#0a0a0f';
-                    tctx.fillRect(0, 0, thumb.width, thumb.height);
-                    tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
-                    previewDataUrl = thumb.toDataURL('image/png', 0.8);
-                }
-            } catch { }
-        }
-
-        saveWidgetData({
-            roomId: roomId || '',
-            roomName: roomDetails?.name || (roomId ? `Board #${roomId.substring(0, Math.min(6, roomId.length))}` : 'Whiteboard'),
-            userName: userName || 'You',
-            userColor,
-            lastUpdated: Date.now(),
-            previewDataUrl,
-            strokeCount: strokeOrder.length,
-            participantCount: userCount,
-            connectionState: isConnected ? 'Connected' : 'Offline',
-            isSharingActive: true
-        });
-
-        setIsLiveActive(true);
-        setShowWidgetToast(true);
-        setTimeout(() => setShowWidgetToast(false), 3000);
-    };
-
-    // One-Click: End Live Whiteboard (One tap terminates the live screen session)
-    const handleEndLiveWhiteboard = () => {
-        clearWidgetData();
-        setIsLiveActive(false);
-    };
 
     // Explicit Exit Room (keeps drawing and room history intact in DB, but marks membership exited)
     const handleExitRoom = async () => {
@@ -399,21 +309,6 @@ const Room = () => {
                 )}
             </AnimatePresence>
 
-            {/* One-Click Live Whiteboard Active Toast */}
-            <AnimatePresence>
-                {showWidgetToast && (
-                    <motion.div
-                        initial={{ y: -40, opacity: 0, x: '-50%' }}
-                        animate={{ y: 0, opacity: 1, x: '-50%' }}
-                        exit={{ y: -40, opacity: 0, x: '-50%' }}
-                        className="fixed top-14 left-1/2 -translate-x-1/2 z-[200] bg-emerald-600 text-white px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border border-emerald-400/30"
-                    >
-                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                        <span>Live Whiteboard Added to Phone Screen!</span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             {/* Top nav - ultra-responsive for mobile & iPhone */}
             <motion.div
                 initial={{ y: -20, x: '-50%', opacity: 0 }}
@@ -464,31 +359,6 @@ const Room = () => {
 
                 {/* Right controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                    {/* ONE-CLICK LIVE WHITEBOARD WIDGET BUTTON */}
-                    {!isLiveActive ? (
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handleAddLiveWhiteboard}
-                            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all border border-emerald-400/30 whitespace-nowrap shrink-0"
-                            title="Add Live Whiteboard to Phone Screen"
-                        >
-                            <Smartphone size={12} strokeWidth={2.5} />
-                            <span className="hidden xs:inline">ADD LIVE WHITEBOARD</span>
-                            <span className="xs:hidden">LIVE WIDGET</span>
-                        </motion.button>
-                    ) : (
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handleEndLiveWhiteboard}
-                            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-rose-500 text-white shadow-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:bg-rose-600 active:scale-95 transition-all border border-rose-400/30 whitespace-nowrap shrink-0"
-                            title="End Live Whiteboard Session"
-                        >
-                            <X size={12} strokeWidth={2.5} />
-                            <span>END LIVE</span>
-                        </motion.button>
-                    )}
 
                     {/* Participant count */}
                     <div

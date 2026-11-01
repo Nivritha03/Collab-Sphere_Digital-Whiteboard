@@ -1,12 +1,11 @@
-import { BrowserRouter, Routes, Route, useNavigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Room from './components/Room';
-import { Users, Palette, Zap, Plus, ArrowRight, Smartphone, LogIn, LogOut, FolderKanban, ShieldCheck } from 'lucide-react';
+import { Users, Palette, Zap, Plus, ArrowRight, LogIn, LogOut, FolderKanban, ShieldCheck } from 'lucide-react';
 import { useWhiteboardStore } from './store/useWhiteboardStore';
 import { useThemeStore } from './store/useThemeStore';
 import { useState, useEffect } from 'react';
 import ThemeToggle from './components/ThemeToggle';
-import { PhoneSimulatorView } from './components/PhoneSimulatorView';
 import { AuthModal } from './components/AuthModal';
 import { CreateRoomModal } from './components/CreateRoomModal';
 import { RoomHistoryModal } from './components/RoomHistoryModal';
@@ -192,9 +191,6 @@ const Home = () => {
                         <FeatureTag icon={<Users size={16} />} text="Team Hub" />
                         <FeatureTag icon={<Palette size={16} />} text="Themes" />
                         <FeatureTag icon={<Zap size={16} />} text="Fast" />
-                        <Link to="/widget-preview" className="no-underline">
-                            <FeatureTag icon={<Smartphone size={16} className="text-cyan-400" />} text="Mobile Widgets" />
-                        </Link>
                     </div>
                 </div>
 
@@ -336,7 +332,6 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/room/:roomId" element={<Room />} />
-        <Route path="/widget-preview" element={<PhoneSimulatorView />} />
       </Routes>
     </BrowserRouter>
   );

@@ -78,7 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         </h2>
                         <p className="text-indigo-200 text-xs mt-1">
                             {mode === 'signup'
-                                ? 'Join now to save your rooms, history, and live widgets'
+                                ? 'Join now to save your rooms, drawings, and history'
                                 : 'Sign in to access your persistent rooms and whiteboards'}
                         </p>
                     </div>
