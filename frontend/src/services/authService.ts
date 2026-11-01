@@ -47,9 +47,16 @@ export const authService = {
             body: JSON.stringify({ username, email, password }),
         });
 
-        const data = await res.json();
+        const rawText = await res.text();
+        let data: any = {};
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch {
+            data = { message: rawText };
+        }
+
         if (!res.ok) {
-            throw new Error(data.message || 'Failed to sign up');
+            throw new Error(data.message || data.error || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign up'));
         }
 
         const authUser: UserAuth = {
@@ -70,9 +77,16 @@ export const authService = {
             body: JSON.stringify({ email, password }),
         });
 
-        const data = await res.json();
+        const rawText = await res.text();
+        let data: any = {};
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch {
+            data = { message: rawText };
+        }
+
         if (!res.ok) {
-            throw new Error(data.message || 'Failed to sign in');
+            throw new Error(data.message || data.error || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign in'));
         }
 
         const authUser: UserAuth = {
