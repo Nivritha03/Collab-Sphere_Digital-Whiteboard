@@ -1,119 +1,105 @@
 # Collab-Sphere Digital Whiteboard
-## Always-Live Collaborative Whiteboard with Mobile Home-Screen Widgets
+## Always-Live Collaborative Whiteboard with Mobile Home-Screen Widgets (Android & iOS)
 
-Collab-Sphere is a full-stack, real-time collaborative digital whiteboard application supporting multi-device phone and tablet synchronization, persistent server rooms, and live mobile home-screen widget previews matching modern iOS & Android 14 widgets.
-
----
-
-## 📱 Mobile Home-Screen Widget & Real-time Collaboration Architecture
-
-As illustrated in the system concept:
-- **Two or more people join the same whiteboard room** across separate mobile devices or tabs.
-- **Incremental real-time drawing & editing**: Vector stroke coordinates are synchronized over WebSockets without full-frame re-uploads.
-- **Home-Screen Live Preview Widget**: When returning to the phone home screen, the widget displays a cached live whiteboard preview, active participant count, room ID, and live connection status.
-- **Control Menu & Quick Actions**:
-  - `Open Whiteboard`: Deep-links straight back to the room.
-  - `Preferences`: Toggles background sync, HD preview, and manual refresh.
-  - `Stop Sharing`: Explicitly detaches and cleans up the home-screen preview without destroying server board history.
-- **Persistent Storage & Disconnection Tolerance**: Server snapshots survive client closures and creator departure. Rooms remain available indefinitely.
+Collab-Sphere is a full-stack, real-time collaborative digital whiteboard application supporting multi-device mobile synchronization (native Android & native iOS), persistent server rooms, live home-screen widgets, and cloud deployments.
 
 ---
 
-## 🛠️ Tech Stack
+## 📱 Mobile Applications (Android & iOS)
 
-### Frontend
-- **Framework**: React 19 + TypeScript + Vite (`host: true` enabled for LAN testing)
-- **Styling**: Tailwind CSS v4, Glassmorphic Design System, Framer Motion
-- **Icons**: Lucide React
-- **State Management**: Zustand
-- **Routing**: React Router DOM (v7)
-- **Real-time Communication**: `@stomp/stompjs` + `sockjs-client` + `BroadcastChannel` fallback
-- **Export & QR**: `jspdf`, `qrcode`, `uuid`
+Collab-Sphere provides native mobile applications for Android and iOS using Capacitor, with native background widget providers, foreground services, and WidgetKit / ActivityKit integrations.
 
-### Backend
-- **Framework**: Spring Boot (Java 17)
-- **Data Persistence**: Spring Data JPA with H2 local fallback & MySQL support
-- **Real-time Communication**: Spring WebSocket with STOMP message broker
-- **Security & CORS**: Spring Security with multi-device origin allowance
+### 🤖 Android Application
 
----
+- **Application ID**: `com.collabsphere.app`
+- **Location**: `frontend/android/`
+- **Native Widget Provider**: `com.collabsphere.app.WhiteboardWidgetProvider`
+- **Live Background Service**: `com.collabsphere.app.LiveWhiteboardForegroundService`
 
-## 🚀 Getting Started
+#### Built Release Artifacts:
+1. **Debug APK** (Direct Testing / Sideloading):
+   - Path: `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
+2. **Release APK** (Direct Distribution):
+   - Path: `frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk`
+3. **Google Play App Bundle (.aab)**:
+   - Path: `frontend/android/app/build/outputs/bundle/release/app-release.aab`
 
-### Prerequisites
-- Node.js (v18 or higher)
-- Java 17+
-- Apache Maven 3.9+
+#### How to Install on Android Device:
+```bash
+# Connect Android phone via USB with USB Debugging enabled:
+adb install frontend/android/app/build/outputs/apk/debug/app-debug.apk
+```
+*Or transfer `app-debug.apk` directly to your phone via Google Drive / USB file transfer and tap to install.*
 
----
-
-### 1. Backend Setup
-
-1. Open a terminal in the `backend` folder:
-   ```bash
-   cd backend
-   ```
-2. Run the Spring Boot application (using `./mvnw.cmd` on Windows or `./mvnw` on macOS/Linux):
-   ```bash
-   ./mvnw.cmd spring-boot:run
-   ```
-   *The backend starts on `http://localhost:8080` (or `http://<your-lan-ip>:8080`).*
-   *H2 database Console is accessible at `http://localhost:8080/h2-console`.*
+#### How to Build / Rebuild in Android Studio:
+```bash
+cd frontend
+npm run build
+npx cap sync android
+cd android
+.\gradlew.bat assembleDebug
+.\gradlew.bat bundleRelease
+```
 
 ---
 
-### 2. Frontend Setup
+### 🍏 iOS Application
 
-1. Open a terminal in the `frontend` folder:
+- **Bundle Identifier**: `com.collabsphere.app`
+- **Location**: `frontend/ios/App/`
+- **Xcode Workspace / Project**: `frontend/ios/App/App.xcodeproj`
+- **Native WidgetKit Extension**: `frontend/ios/App/App/CollabSphereWidget.swift`
+- **ActivityKit Live Activity**: `frontend/ios/App/App/CollabSphereLiveActivity.swift`
+
+#### How to Open and Deploy on iPhone (requires macOS + Xcode):
+1. Open the project in Xcode:
    ```bash
    cd frontend
-   npm install
+   npx cap open ios
+   # Or open frontend/ios/App/App.xcodeproj directly in Xcode
    ```
-2. Start the development server:
-   ```bash
-   npm run dev
-   ```
-   *Vite binds to all network interfaces (`http://0.0.0.0:5173`).*
+2. Select your Apple Developer Team in **Signing & Capabilities**.
+3. Plug in your physical iPhone, select it as the run target, and click **Run (Cmd + R)**.
+4. For TestFlight / App Store submission:
+   - Select **Product > Archive**.
+   - In the Organizer, click **Distribute App > App Store Connect > Upload**.
 
 ---
 
-## 📲 How to Connect Two Mobile Devices on the Same Whiteboard
+## ☁️ Production Backend Deployment (Docker & MySQL)
 
-1. **Find your computer's local IP address** (e.g. `172.20.10.5` or `192.168.1.X` via `ipconfig` or `ifconfig`).
-2. **On Phone 1**:
-   - Open browser to `http://<your-computer-ip>:5173`.
-   - Enter your name and click **Initialize Space**.
-   - Tap the **Invite** button at the top right to view the share link and **QR Code**.
-3. **On Phone 2**:
-   - Scan the QR code or navigate to `http://<your-computer-ip>:5173/room/<room-id>`.
-   - Enter your name and click **Join Room**.
-4. **Draw simultaneously**: Both phones see strokes, shapes, text, eraser, and active cursor positions in real time.
-5. **View Home Screen Live Widgets**:
-   - Navigate to `/widget-preview` or tap **Widgets** in the top bar to inspect Phone 1 (iOS style) and Phone 2 (Android 14 style) home screens with live previews and the Quick Actions control menu.
-   - Tap **Stop Sharing** in the control menu to stop widget synchronization.
+The backend is configured with production MySQL and containerized via Docker.
+
+### Running with Docker Compose:
+```bash
+# Set your secure database password
+export DB_PASSWORD="YourStrongPassword123!"
+
+# Start MySQL and Spring Boot backend
+docker compose up -d --build
+```
+
+The Spring Boot backend will connect to persistent MySQL at port `8080`.
 
 ---
 
-## 📡 REST Endpoints & WebSocket Destinations
+## 🛠️ Local Development
 
-### REST APIs
-- `GET /api/whiteboard/{room}`: Fetch all stored stroke elements for the room.
-- `GET /api/whiteboard/{room}/state`: Unified DTO returning elements, latest snapshot, participant count, and last updated timestamp for widgets.
-- `GET /api/version/{room}`: Fetch historical snapshots for version rewinding.
+### Prerequisites
+- Node.js (v18+)
+- Java 17+
+- Android SDK (installed at `C:\Users\<user>\AppData\Local\Android\Sdk`)
 
-### WebSocket Destinations
-- **Client to Server**:
-  - `/app/draw/{room}`: Broadcast stroke element & persist to room.
-  - `/app/cursor/{room}`: Real-time user cursor coordinates.
-  - `/app/presence/{room}`: Heartbeat and join/leave presence.
-  - `/app/save/{room}`: Save version history snapshot.
-  - `/app/room/{room}/undo`: Undo last action by user.
-  - `/app/room/{room}/redo`: Redo action by user.
-  - `/app/room/{room}/clear`: Clear the whiteboard canvas & db records.
-- **Server to Client Subscriptions**:
-  - `/topic/whiteboard/{room}`: Live element drawings.
-  - `/topic/cursor/{room}`: Participant cursor movements.
-  - `/topic/presence/{room}`: Presence events.
-  - `/topic/undo/{room}`: Undo events.
-  - `/topic/redo/{room}`: Redo events.
-  - `/topic/clear/{room}`: Clear canvas events.
+### 1. Start Backend:
+```bash
+cd backend
+./mvnw.cmd spring-boot:run
+```
+
+### 2. Start Frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Navigate to `http://localhost:5173` or open your local network IP on mobile.
