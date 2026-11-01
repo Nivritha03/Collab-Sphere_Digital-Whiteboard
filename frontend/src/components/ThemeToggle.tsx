@@ -17,11 +17,11 @@ const ThemeToggle = () => {
 
     const getIcon = () => {
         switch (theme) {
-            case 'light': return <Sun size={20} className="text-amber-400" />;
-            case 'dark': return <Moon size={20} className="text-indigo-400" />;
-            case 'midnight': return <Sparkles size={20} className="text-sky-400" />;
-            case 'cyber': return <Zap size={20} className="text-pink-400" fill="currentColor" />;
-            default: return <Moon size={20} />;
+            case 'light': return <Sun size={15} className="sm:w-[18px] sm:h-[18px] text-amber-400" />;
+            case 'dark': return <Moon size={15} className="sm:w-[18px] sm:h-[18px] text-indigo-400" />;
+            case 'midnight': return <Sparkles size={15} className="sm:w-[18px] sm:h-[18px] text-sky-400" />;
+            case 'cyber': return <Zap size={15} className="sm:w-[18px] sm:h-[18px] text-pink-400" fill="currentColor" />;
+            default: return <Moon size={15} className="sm:w-[18px] sm:h-[18px]" />;
         }
     };
 
@@ -30,7 +30,7 @@ const ThemeToggle = () => {
             whileHover={{ scale: 1.1, rotate: 15 }}
             whileTap={{ scale: 0.9 }}
             onClick={toggleTheme}
-            className="relative w-12 h-12 flex items-center justify-center rounded-2xl glass-panel hover:border-[var(--accent-primary)] transition-all z-50 group"
+            className="relative w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-full glass-panel hover:border-[var(--accent-primary)] transition-all z-50 group shrink-0"
             title={`Current Theme: ${theme.toUpperCase()}`}
         >
             <AnimatePresence mode="wait">

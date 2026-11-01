@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getBackendUrls } from '../config/apiConfig';
 import { Client } from '@stomp/stompjs';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -201,12 +202,25 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => {
         wsSend(`/app/save/${state.roomId}`, snapshot);
     };
 
+    const getStoredUserName = (): string => {
+        try {
+            const authStr = localStorage.getItem('collab_sphere_auth_user');
+            if (authStr) {
+                const parsed = JSON.parse(authStr);
+                if (parsed.username) return parsed.username;
+            }
+            const stored = localStorage.getItem('collab_sphere_username');
+            if (stored) return stored;
+        } catch {}
+        return '';
+    };
+
     return {
         stompClient: null,
         isConnected: false,
         roomId: null,
         userId: MY_USER_ID,
-        userName: '',
+        userName: getStoredUserName(),
         userColor: MY_USER_COLOR,
         cursors: {},
         strokes: {},
@@ -225,7 +239,12 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => {
         setActiveTool: (tool) => set({ activeTool: tool }),
         setCurrentColor: (color) => set({ currentColor: color }),
         setCurrentSize: (size) => set({ currentSize: size }),
-        setUserName: (name) => set({ userName: name }),
+        setUserName: (name) => {
+            try {
+                if (name) localStorage.setItem('collab_sphere_username', name);
+            } catch {}
+            set({ userName: name });
+        },
         newStroke: () => set({ currentStrokeId: uuidv4() }),
 
         generateAIContent: (prompt) => {
@@ -237,7 +256,12 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => {
                 { tool: 'rectangle', x0: mid - 1500, y0: mid - 1500, x1: mid + 1500, y1: mid - 500, color: userColor, size: 20, strokeId: `${baseId}-1`, senderId: MY_USER_ID, isFinished: true },
                 { tool: 'text', x0: mid, y0: mid - 1000, x1: mid, y1: mid - 1000, color: userColor, size: 40, strokeId: `${baseId}-2`, senderId: MY_USER_ID, isFinished: true, text: 'AI: ' + prompt.toUpperCase() },
             ];
-            items.forEach((d) => get()._applyPoint(d));
+            items.forEach((d) => {
+                get()._applyPoint(d);
+                bcSend({ ...d, roomId });
+                wsSend(`/app/draw/${roomId}`, d);
+            });
+            saveSnapshot();
         },
 
         // ── connect ──────────────────────────────────────────────────────────
@@ -325,11 +349,12 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => {
 
             cursorPruneInterval = setInterval(pruneStaleCursors, 3000);
 
-            // ── Try WebSocket backend (optional) ───────────────────────────
+            // ── Try WebSocket backend ───────────────────────────
             try {
+                const { wsUrl } = getBackendUrls();
                 const client = new Client({
-                    brokerURL: 'ws://localhost:8080/ws-native',
-                    reconnectDelay: 5000,
+                    brokerURL: wsUrl,
+                    reconnectDelay: 3000,
                     heartbeatIncoming: 0,
                     heartbeatOutgoing: 20000,
                 });

@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+target/
+
+# Local databases and temp files
+backend/data/
+backend/.metadata/
+*.log
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Build outputs
+frontend/dist/
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/

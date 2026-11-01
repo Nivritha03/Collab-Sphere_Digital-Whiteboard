@@ -3,10 +3,12 @@ package com.whiteboard.service;
 import com.whiteboard.model.WhiteboardElement;
 import com.whiteboard.repository.WhiteboardElementRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Transactional
 public class WhiteboardService {
 
     private final WhiteboardElementRepository repo;

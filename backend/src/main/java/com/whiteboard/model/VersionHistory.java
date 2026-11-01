@@ -13,7 +13,8 @@ public class VersionHistory {
 
     private String roomCode;
 
-    @Column(length = 20000)
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String snapshot;
 
     private long timestamp;

@@ -15,12 +15,14 @@ import java.util.Map;
 public class WhiteboardWebSocketController {
 
     private final SimpMessagingTemplate template;
+    private final WhiteboardService service;
     private final VersionHistoryService versionHistoryService;
 
     public WhiteboardWebSocketController(SimpMessagingTemplate template,
                                          WhiteboardService service,
                                          VersionHistoryService versionHistoryService) {
         this.template = template;
+        this.service = service;
         this.versionHistoryService = versionHistoryService;
     }
 
@@ -28,6 +30,8 @@ public class WhiteboardWebSocketController {
     @MessageMapping("/draw/{room}")
     public void draw(@DestinationVariable String room,
                      WhiteboardElement element) {
+        element.setRoomCode(room);
+        service.save(element);
 
         template.convertAndSend(
                 "/topic/whiteboard/" + room,
@@ -59,6 +63,7 @@ public class WhiteboardWebSocketController {
     @MessageMapping("/room/{room}/clear")
     public void clear(@DestinationVariable String room,
                       @Payload Map<String, Object> payload) {
+        service.clearRoom(room);
 
         template.convertAndSend(
             "/topic/clear/" + room,

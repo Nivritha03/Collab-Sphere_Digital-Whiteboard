@@ -8,9 +8,13 @@ import Toolbar from './Toolbar';
 import ThemeToggle from './ThemeToggle';
 import CursorOverlay from './CursorOverlay';
 import HistorySidebar from './HistorySidebar';
-import { Share2, Users, Wifi, WifiOff, Home, Copy, X, Check, History as HistoryIcon, Download, ArrowRight } from 'lucide-react';
+import { Share2, Users, WifiOff, Home, Copy, X, Check, ArrowRight, Smartphone, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
+import { getBackendUrls } from '../config/apiConfig';
+import { saveWidgetData, getWidgetData, clearWidgetData } from '../services/widgetStorage';
+import { authService } from '../services/authService';
 
 const { useState, useEffect, useRef } = React;
 
@@ -93,7 +97,91 @@ const Room = () => {
     const [showShareModal, setShowShareModal] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [copied, setCopied] = useState(false);
-    const [nameReady, setNameReady] = useState(!!userName.trim());
+    const [nameReady, setNameReady] = useState(() => {
+        if (userName && userName.trim()) return true;
+        try {
+            const authStr = localStorage.getItem('collab_sphere_auth_user');
+            if (authStr) {
+                const parsed = JSON.parse(authStr);
+                if (parsed.username) {
+                    return true;
+                }
+            }
+            const stored = localStorage.getItem('collab_sphere_username');
+            if (stored && stored.trim()) return true;
+        } catch {}
+        return false;
+    });
+    const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+    const [roomDetails, setRoomDetails] = useState<{ name: string; createdBy: string } | null>(null);
+    const [isLiveActive, setIsLiveActive] = useState<boolean>(() => {
+        const data = getWidgetData();
+        return !!(data?.roomId && roomId && data.roomId === roomId && data?.isSharingActive === true);
+    });
+
+    // Fetch room name and creator
+    useEffect(() => {
+        if (!roomId) return;
+        const { apiUrl } = getBackendUrls();
+        fetch(`${apiUrl}/api/whiteboard/${roomId}/state`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.roomName) {
+                    setRoomDetails({ name: data.roomName, createdBy: data.createdBy || '' });
+                }
+            })
+            .catch(() => {});
+    }, [roomId]);
+
+    // Update Widget state cache periodically when strokes or users change
+    const { strokeOrder } = useWhiteboardStore();
+    useEffect(() => {
+        if (!roomId) return;
+        
+        // Capture high-contrast thumbnail preview from canvas with proper background
+        const canvas = document.querySelector('canvas');
+        let previewDataUrl: string | undefined = undefined;
+        if (canvas && canvas.width > 0 && canvas.height > 0) {
+            try {
+                const thumb = document.createElement('canvas');
+                thumb.width = 400;
+                thumb.height = 250;
+                const tctx = thumb.getContext('2d');
+                if (tctx) {
+                    // Dark theme background to match the drawing canvas
+                    tctx.fillStyle = theme === 'light' ? '#f8fafc' : '#0a0a0f';
+                    tctx.fillRect(0, 0, thumb.width, thumb.height);
+                    tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+                    previewDataUrl = thumb.toDataURL('image/png', 0.8);
+                }
+            } catch { }
+        }
+
+        const displayName = roomDetails?.name || `Board #${roomId ? roomId.substring(0, Math.min(6, roomId.length)) : ''}`;
+
+        saveWidgetData({
+            roomId: roomId || '',
+            roomName: displayName,
+            userName: userName || 'You',
+            userColor,
+            lastUpdated: Date.now(),
+            previewDataUrl,
+            strokeCount: strokeOrder.length,
+            participantCount: Math.max(1, Object.keys(activeUsers).length),
+            connectionState: isConnected ? 'Connected' : 'Offline',
+            isSharingActive: isLiveActive
+        });
+    }, [roomId, strokeOrder.length, isConnected, activeUsers, userName, userColor, theme, roomDetails?.name, isLiveActive]);
+
+    // Generate QR code whenever share modal opens
+    useEffect(() => {
+        if (showShareModal && roomId) {
+            const inviteUrl = `${window.location.origin}/room/${roomId}`;
+            QRCode.toDataURL(inviteUrl, { width: 220, margin: 2, color: { dark: '#0f172a', light: '#ffffff' } })
+                .then(setQrCodeUrl)
+                .catch(() => {});
+        }
+    }, [showShareModal, roomId]);
 
     // Connect only after name is set
     useEffect(() => {
@@ -106,12 +194,11 @@ const Room = () => {
         if (!nameReady) return;
         connect(roomId);
 
-        // Fetch version history
-        fetch(`https://collab-sphere-digitalwhiteboard.onrender.com/api/version/${roomId}`)
+        // Fetch version history & initial board snapshot
+        const { apiUrl } = getBackendUrls();
+        fetch(`${apiUrl}/api/version/${roomId}`)
             .then(res => res.json())
             .then(data => {
-                console.log("History:", data);
-
                 if (data.length > 0) {
                     const latest = data[0]; // only latest snapshot
                     const elements = JSON.parse(latest.snapshot);
@@ -121,7 +208,6 @@ const Room = () => {
                             useWhiteboardStore.getState()._applyPoint(el);
                         });
                     } else if (elements && typeof elements === 'object') {
-                        // The elements are stored as a map of strokes
                         Object.values(elements as Record<string, any>).forEach(stroke => {
                             if (stroke && Array.isArray(stroke.points)) {
                                 stroke.points.forEach((p: any) => useWhiteboardStore.getState()._applyPoint(p));
@@ -130,7 +216,7 @@ const Room = () => {
                     }
                 }
             })
-            .catch(err => console.error("History fetch error:", err));
+            .catch(err => console.log("History fetch note:", err));
 
         return () => {
             // only disconnect if leaving page
@@ -151,17 +237,97 @@ const Room = () => {
 
     const userCount = Math.max(1, Object.keys(activeUsers).length);
 
-    const handleLeave = () => {
+    const [showWidgetToast, setShowWidgetToast] = useState(false);
+
+    // One-Click: Add Live Whiteboard to Screen (True 1-Click: Stays right on canvas, activates live background widget session)
+    const handleAddLiveWhiteboard = () => {
+        const canvas = document.querySelector('canvas');
+        let previewDataUrl: string | undefined = undefined;
+        if (canvas && canvas.width > 0 && canvas.height > 0) {
+            try {
+                const thumb = document.createElement('canvas');
+                thumb.width = 400;
+                thumb.height = 250;
+                const tctx = thumb.getContext('2d');
+                if (tctx) {
+                    tctx.fillStyle = theme === 'light' ? '#f8fafc' : '#0a0a0f';
+                    tctx.fillRect(0, 0, thumb.width, thumb.height);
+                    tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+                    previewDataUrl = thumb.toDataURL('image/png', 0.8);
+                }
+            } catch { }
+        }
+
+        saveWidgetData({
+            roomId: roomId || '',
+            roomName: roomDetails?.name || (roomId ? `Board #${roomId.substring(0, Math.min(6, roomId.length))}` : 'Whiteboard'),
+            userName: userName || 'You',
+            userColor,
+            lastUpdated: Date.now(),
+            previewDataUrl,
+            strokeCount: strokeOrder.length,
+            participantCount: userCount,
+            connectionState: isConnected ? 'Connected' : 'Offline',
+            isSharingActive: true
+        });
+
+        setIsLiveActive(true);
+        setShowWidgetToast(true);
+        setTimeout(() => setShowWidgetToast(false), 3000);
+    };
+
+    // One-Click: End Live Whiteboard (One tap terminates the live screen session)
+    const handleEndLiveWhiteboard = () => {
+        clearWidgetData();
+        setIsLiveActive(false);
+    };
+
+    // Explicit Exit Room (keeps drawing and room history intact in DB, but marks membership exited)
+    const handleExitRoom = async () => {
+        if (roomId) {
+            try {
+                await authService.exitRoom(roomId);
+            } catch (e) {
+                console.error('Failed to notify room exit:', e);
+            }
+        }
         useWhiteboardStore.getState().disconnect();
-        window.location.href = "/";
+        navigate('/');
     };
 
     const handleCopy = async () => {
+        const textToCopy = roomId || '';
+        if (!textToCopy) return;
+
         try {
-            await navigator.clipboard.writeText(roomId || '');
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(textToCopy);
+            } else {
+                throw new Error('Clipboard API unavailable');
+            }
             setCopied(true);
             setTimeout(() => setCopied(false), 2500);
-        } catch { }
+        } catch {
+            // Mobile Safari / HTTP fallback
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2500);
+                }
+            } catch (err) {
+                console.error('Copy fallback failed:', err);
+            }
+        }
     };
 
     const exportToPDF = () => {
@@ -225,126 +391,128 @@ const Room = () => {
                 )}
             </AnimatePresence>
 
-            {/* Top nav */}
+            {/* One-Click Live Whiteboard Active Toast */}
+            <AnimatePresence>
+                {showWidgetToast && (
+                    <motion.div
+                        initial={{ y: -40, opacity: 0, x: '-50%' }}
+                        animate={{ y: 0, opacity: 1, x: '-50%' }}
+                        exit={{ y: -40, opacity: 0, x: '-50%' }}
+                        className="fixed top-14 left-1/2 -translate-x-1/2 z-[200] bg-emerald-600 text-white px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border border-emerald-400/30"
+                    >
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                        <span>Live Whiteboard Added to Phone Screen!</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Top nav - ultra-responsive for mobile & iPhone */}
             <motion.div
                 initial={{ y: -20, x: '-50%', opacity: 0 }}
                 animate={{ y: 0, x: '-50%', opacity: 1 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 120, delay: 0.2 }}
-                className="absolute left-1/2 top-4 md:top-8 w-[92%] md:w-auto z-[50] flex items-center justify-between md:justify-start gap-4 md:gap-6 px-4 md:px-8 py-3 md:py-4 glass-panel rounded-full shadow-2xl"
+                className="fixed left-1/2 top-1.5 sm:top-4 z-[50] flex items-center justify-between gap-1.5 px-2 sm:px-4 py-1.5 w-[calc(100%-0.75rem)] max-w-2xl glass-panel rounded-2xl sm:rounded-full shadow-2xl backdrop-blur-2xl border border-white/10 overflow-x-auto no-scrollbar"
+                style={{
+                    paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.35rem)',
+                }}
             >
-                <div className="flex items-center gap-2 md:gap-4 border-r border-[var(--border-color)] pr-3 md:pr-6 shrink-0">
+                {/* Left group */}
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     <motion.button
-                        whileHover={{ scale: 1.1, rotate: -90 }}
+                        whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={() => navigate('/')}
-                        className="p-1.5 text-[var(--secondary-text)] hover:text-[var(--accent-primary)] transition-all"
+                        className="p-1 sm:p-1.5 text-[var(--secondary-text)] hover:text-[var(--accent-primary)] transition-all rounded-full"
                         title="Home"
                     >
-                        <Home size={20} strokeWidth={3} />
+                        <Home size={15} className="sm:w-[18px] sm:h-[18px]" strokeWidth={2.5} />
                     </motion.button>
 
                     <motion.button
-                        whileHover={{ scale: 1.1, x: -2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={handleLeave}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
-                        title="Leave Room"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleExitRoom}
+                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shrink-0"
+                        title="Explicitly Exit Room"
                     >
-                        <X size={16} strokeWidth={3} />
-                        <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">Leave</span>
+                        <X size={12} strokeWidth={2.5} />
+                        <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Exit</span>
                     </motion.button>
 
-                    <div className="flex flex-col ml-2">
-                        <span className="hidden md:block text-[9px] uppercase tracking-[0.3em] text-[var(--accent-primary)] font-black opacity-80 leading-none mb-1">Node</span>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs md:text-sm font-black text-[var(--text-color)] tracking-tighter">{roomId?.substring(0, 8)}</span>
-                            <motion.button
-                                whileHover={{ scale: 1.2 }}
-                                whileTap={{ scale: 0.8 }}
-                                onClick={handleCopy}
-                                className="text-[var(--secondary-text)] hover:text-[var(--accent-primary)] transition-all"
-                            >
-                                {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                            </motion.button>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3 md:gap-6 flex-1 md:flex-none justify-center">
-                    {/* Current user chip */}
-                    <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-[var(--bg-color)]/50 border border-[var(--border-color)] rounded-full overflow-hidden">
-                        <div
-                            className="w-2 h-2 rounded-full animate-pulse shrink-0"
-                            style={{ backgroundColor: userColor, boxShadow: `0 0 8px ${userColor}` }}
-                        />
-                        <span className="text-[10px] md:text-[11px] font-black text-[var(--text-color)] uppercase tracking-widest truncate max-w-[60px] md:max-w-[120px]">
-                            {userName || 'You'}
+                    {/* Room Name & ID pill with copy */}
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-color)]/60 border border-[var(--border-color)] max-w-[105px] sm:max-w-[180px] shrink-0">
+                        <span className="text-[10px] sm:text-xs font-bold text-[var(--text-color)] truncate">
+                            {roomDetails?.name || (roomId ? `#${roomId.substring(0, Math.min(6, roomId.length))}` : 'Board')}
                         </span>
-                    </div>
-
-                    {/* Other users' color dots */}
-                    <div className="hidden sm:flex items-center gap-2">
-                        {Object.values(activeUsers).slice(0, 4).map((u, i) => (
-                            <div
-                                key={i}
-                                title={u.name}
-                                className="w-6 h-6 rounded-full border-2 border-[var(--border-color)] flex items-center justify-center text-[8px] font-black text-white"
-                                style={{ backgroundColor: u.color, boxShadow: `0 0 8px ${u.color}80` }}
-                            >
-                                {u.name?.charAt(0).toUpperCase() || '?'}
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="hidden sm:flex items-center gap-4">
-                        <div
-                            className="flex items-center gap-2 px-3 py-1 rounded-full border border-[var(--border-color)] bg-[var(--bg-color)]/40"
-                            title={`${userCount} user${userCount !== 1 ? 's' : ''} in room`}
+                        <button
+                            onClick={handleCopy}
+                            className="text-[var(--secondary-text)] hover:text-[var(--accent-primary)] p-0.5 transition-all shrink-0"
+                            title="Copy Room ID"
                         >
-                            <Users size={13} className="text-[var(--accent-secondary)]" />
-                            <span className="text-[11px] font-black text-[var(--text-color)]">{userCount}</span>
-                        </div>
-                        {isConnected ? (
-                            <div className="relative">
-                                <Wifi size={14} className="text-green-500" />
-                                <div className="absolute inset-0 animate-ping bg-green-500/40 rounded-full" />
-                            </div>
-                        ) : <WifiOff size={14} className="text-red-500 animate-pulse" />}
+                            {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 md:gap-3 border-l border-[var(--border-color)] pl-3 md:pl-6 shrink-0">
-                    <motion.button
-                        whileHover={{ scale: 1.1, y: -2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => setShowHistory(true)}
-                        className="hidden md:flex p-2 text-[var(--secondary-text)] hover:text-[var(--accent-primary)] transition-all"
+                {/* Right controls */}
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                    {/* ONE-CLICK LIVE WHITEBOARD WIDGET BUTTON */}
+                    {!isLiveActive ? (
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleAddLiveWhiteboard}
+                            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all border border-emerald-400/30 whitespace-nowrap shrink-0"
+                            title="Add Live Whiteboard to Phone Screen"
+                        >
+                            <Smartphone size={12} strokeWidth={2.5} />
+                            <span className="hidden xs:inline">ADD LIVE WHITEBOARD</span>
+                            <span className="xs:hidden">LIVE WIDGET</span>
+                        </motion.button>
+                    ) : (
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleEndLiveWhiteboard}
+                            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-rose-500 text-white shadow-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:bg-rose-600 active:scale-95 transition-all border border-rose-400/30 whitespace-nowrap shrink-0"
+                            title="End Live Whiteboard Session"
+                        >
+                            <X size={12} strokeWidth={2.5} />
+                            <span>END LIVE</span>
+                        </motion.button>
+                    )}
+
+                    {/* Participant count */}
+                    <div
+                        className="flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-color)]/40 text-[9px] sm:text-[10px] font-bold shrink-0"
+                        title={`${userCount} active in room`}
                     >
-                        <HistoryIcon size={20} />
-                    </motion.button>
+                        <Users size={10} className="text-[var(--accent-secondary)]" />
+                        <span>{userCount}</span>
+                    </div>
+
+                    {/* Live status dot */}
+                    <span 
+                        className={`w-2 h-2 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500 ring-2 ring-emerald-500/30' : 'bg-red-500 animate-pulse'}`} 
+                        title={isConnected ? 'Connected' : 'Offline'} 
+                    />
+
+                    {/* Share Button */}
                     <motion.button
-                        whileHover={{ scale: 1.1, y: -2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={exportToPDF}
-                        className="p-1 md:p-2 text-[var(--secondary-text)] hover:text-[var(--accent-secondary)] transition-all"
-                    >
-                        <Download size={20} />
-                    </motion.button>
-                    <motion.button
-                        whileHover={{ scale: 1.05, y: -4 }}
+                        whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setShowShareModal(true)}
-                        className="px-4 md:px-8 py-2 md:py-2.5 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white rounded-full text-[9px] md:text-[11px] font-black uppercase tracking-widest transition-all shadow-xl"
+                        className="px-2 sm:px-3 py-0.5 sm:py-1 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-md shrink-0"
                     >
-                        Invite
+                        Share
                     </motion.button>
+
+                    {/* Theme Toggle */}
+                    <div className="shrink-0 scale-90 sm:scale-100">
+                        <ThemeToggle />
+                    </div>
                 </div>
             </motion.div>
-
-            {/* Theme toggle */}
-            <div className="fixed top-8 right-8 z-[60] flex flex-col gap-4">
-                <ThemeToggle />
-            </div>
 
             <Toolbar />
 
@@ -365,39 +533,48 @@ const Room = () => {
                             exit={{ opacity: 0, scale: 0.8, y: 100 }}
                             className="fixed inset-0 flex items-center justify-center z-[201] pointer-events-none p-4"
                         >
-                            <div className="glass-panel rounded-[3rem] p-12 sm:p-16 shadow-[0_0_100px_rgba(0,0,0,0.5)] w-full max-w-xl pointer-events-auto relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-                                    <Share2 size={200} />
+                            <div className="glass-panel rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-[0_0_100px_rgba(0,0,0,0.5)] w-full max-w-lg pointer-events-auto relative overflow-hidden max-h-[90vh] overflow-y-auto no-scrollbar">
+                                <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+                                    <Share2 size={120} />
                                 </div>
-                                <div className="flex justify-between items-start mb-12">
+                                <div className="flex justify-between items-start mb-6 sm:mb-8">
                                     <div>
-                                        <h2 className="text-5xl font-black text-[var(--text-color)] tracking-tighter mb-2">Invite Link</h2>
-                                        <p className="text-[var(--secondary-text)] text-sm font-bold uppercase tracking-widest opacity-60">Share with collaborators</p>
+                                        <h2 className="text-2xl sm:text-4xl font-black text-[var(--text-color)] tracking-tighter mb-1">Invite Link</h2>
+                                        <p className="text-[var(--secondary-text)] text-xs font-bold uppercase tracking-widest opacity-60">Share with collaborators</p>
                                     </div>
-                                    <button onClick={() => setShowShareModal(false)} className="p-3 hover:bg-[var(--border-color)] rounded-full text-[var(--secondary-text)] hover:text-[var(--text-color)] transition-all">
-                                        <X size={28} />
+                                    <button onClick={() => setShowShareModal(false)} className="p-2 hover:bg-[var(--border-color)] rounded-full text-[var(--secondary-text)] hover:text-[var(--text-color)] transition-all">
+                                        <X size={20} />
                                     </button>
                                 </div>
-                                <div className="bg-[var(--bg-color)]/80 border border-[var(--border-color)] rounded-[2.5rem] px-10 py-8 mb-12 shadow-inner group">
-                                    <p className="text-[10px] text-[var(--accent-primary)] uppercase tracking-[0.4em] font-black mb-4">Room ID</p>
-                                    <p className="text-[var(--text-color)] font-black text-2xl break-all tracking-tighter group-hover:text-[var(--accent-primary)] transition-colors">{roomId}</p>
+                                <div className="bg-[var(--bg-color)]/80 border border-[var(--border-color)] rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 mb-6 shadow-inner flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                                    {qrCodeUrl && (
+                                        <div className="bg-white p-2.5 rounded-2xl shadow-md shrink-0">
+                                            <img src={qrCodeUrl} alt="Room QR Code" className="w-28 h-28 sm:w-32 sm:h-32 rounded-lg" />
+                                            <p className="text-[9px] text-center font-bold text-slate-700 mt-1 uppercase tracking-wider">Scan with Phone</p>
+                                        </div>
+                                    )}
+                                    <div className="flex-1 text-center sm:text-left">
+                                        <p className="text-[10px] text-[var(--accent-primary)] uppercase tracking-[0.3em] font-black mb-1">Room ID</p>
+                                        <p className="text-[var(--text-color)] font-mono font-black text-base sm:text-lg break-all tracking-tight mb-2">{roomId}</p>
+                                        <p className="text-xs text-[var(--secondary-text)] opacity-80">Scan the QR code with another mobile phone camera to join this whiteboard directly.</p>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col sm:flex-row gap-5">
+                                <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
                                     <motion.button
-                                        whileHover={{ scale: 1.02, y: -5 }}
+                                        whileHover={{ scale: 1.02 }}
                                         whileTap={{ scale: 0.98 }}
                                         onClick={handleCopy}
-                                        className={`flex-1 flex items-center justify-center gap-4 py-6 rounded-[2rem] font-black uppercase tracking-widest text-sm transition-all shadow-2xl ${copied ? 'bg-emerald-500 text-white' : 'bg-[var(--text-color)] text-[var(--bg-color)]'}`}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-black uppercase tracking-wider text-xs transition-all shadow-xl ${copied ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white'}`}
                                     >
-                                        {copied ? <Check size={24} strokeWidth={4} /> : <Copy size={24} strokeWidth={4} />} {copied ? 'Copied!' : 'Copy ID'}
+                                        {copied ? <Check size={16} strokeWidth={3} /> : <Copy size={16} strokeWidth={3} />} {copied ? 'Room ID Copied!' : 'Copy Room ID'}
                                     </motion.button>
                                     <motion.button
-                                        whileHover={{ scale: 1.02, y: -5 }}
+                                        whileHover={{ scale: 1.02 }}
                                         whileTap={{ scale: 0.98 }}
-                                        onClick={() => { navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 2500); }}
-                                        className="flex-1 flex items-center justify-center gap-4 py-6 rounded-[2rem] font-black uppercase tracking-widest text-sm bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white shadow-2xl transition-all"
+                                        onClick={exportToPDF}
+                                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-black uppercase tracking-wider text-xs bg-white/10 text-[var(--text-color)] hover:bg-white/20 border border-[var(--border-color)] transition-all"
                                     >
-                                        <Share2 size={24} strokeWidth={3} /> Copy Link
+                                        <Download size={16} /> Export PDF
                                     </motion.button>
                                 </div>
                             </div>
