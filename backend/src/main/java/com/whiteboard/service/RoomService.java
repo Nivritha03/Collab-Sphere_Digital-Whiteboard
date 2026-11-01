@@ -135,28 +135,74 @@ public class RoomService {
     }
 
     public List<RoomSummaryDTO> getUserRoomHistory(String userEmail) {
-        List<RoomMembership> memberships = membershipRepository.findAllByUserEmailOrderByLastAccessedAtDesc(userEmail);
-        
-        return memberships.stream().map(m -> {
-            Room room = m.getRoom();
+        if (userEmail == null || userEmail.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        final String cleanEmail = userEmail.trim();
+
+        // 1. Gather all rooms the user has memberships in
+        List<RoomMembership> memberships = membershipRepository.findAllByUserEmailOrderByLastAccessedAtDesc(cleanEmail);
+        Map<String, RoomMembership> membershipByCode = new HashMap<>();
+        for (RoomMembership m : memberships) {
+            if (m.getRoom() != null && m.getRoom().getCode() != null) {
+                membershipByCode.put(m.getRoom().getCode(), m);
+            }
+        }
+
+        // 2. Also gather any rooms created by this user
+        List<Room> createdRooms = roomRepository.findByCreatedByOrderByCreatedAtDesc(cleanEmail);
+
+        // 3. Merge all unique rooms
+        Map<String, Room> allRoomsMap = new LinkedHashMap<>();
+        for (Room r : createdRooms) {
+            allRoomsMap.put(r.getCode(), r);
+        }
+        for (RoomMembership m : memberships) {
+            if (m.getRoom() != null) {
+                allRoomsMap.putIfAbsent(m.getRoom().getCode(), m.getRoom());
+            }
+        }
+
+        // 4. Transform into accurate RoomSummaryDTO with live participants
+        return allRoomsMap.values().stream().map(room -> {
+            RoomMembership userMem = membershipByCode.get(room.getCode());
             List<RoomMembership> allMembers = membershipRepository.findByRoomCode(room.getCode());
-            List<String> participants = allMembers.stream()
-                    .map(mem -> mem.getUser().getUsername())
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .collect(Collectors.toList());
+            
+            Set<String> participantNames = new LinkedHashSet<>();
+            if (room.getCreatedBy() != null && !room.getCreatedBy().equalsIgnoreCase("anonymous")) {
+                userRepository.findByEmail(room.getCreatedBy())
+                        .ifPresent(u -> participantNames.add(u.getUsername()));
+            }
+
+            for (RoomMembership rm : allMembers) {
+                if (rm.getUser() != null && rm.getUser().getUsername() != null) {
+                    participantNames.add(rm.getUser().getUsername());
+                }
+            }
+
+            LocalDateTime joinedAt = userMem != null ? userMem.getJoinedAt() : room.getCreatedAt();
+            LocalDateTime lastAccessed = userMem != null ? userMem.getLastAccessedAt() : room.getLastAccessedAt();
+            boolean hasExited = userMem != null ? userMem.isHasExited() : false;
 
             return RoomSummaryDTO.builder()
                     .roomCode(room.getCode())
-                    .roomName(room.getName())
+                    .roomName(room.getName() != null ? room.getName() : "Board #" + room.getCode())
                     .createdBy(room.getCreatedBy())
-                    .joinedAt(m.getJoinedAt() != null ? m.getJoinedAt().format(FORMATTER) : "Recently")
-                    .lastAccessedAt(m.getLastAccessedAt() != null ? m.getLastAccessedAt().format(FORMATTER) : "Recently")
-                    .participantCount(Math.max(1, participants.size()))
+                    .joinedAt(joinedAt != null ? joinedAt.format(FORMATTER) : "Recently")
+                    .lastAccessedAt(lastAccessed != null ? lastAccessed.format(FORMATTER) : "Recently")
+                    .participantCount(Math.max(1, participantNames.size()))
                     .isActive(room.isActive())
-                    .hasExited(m.isHasExited())
-                    .participants(participants)
+                    .hasExited(hasExited)
+                    .participants(new ArrayList<>(participantNames))
                     .build();
+        }).sorted((a, b) -> {
+            try {
+                LocalDateTime dtA = LocalDateTime.parse(a.getLastAccessedAt(), FORMATTER);
+                LocalDateTime dtB = LocalDateTime.parse(b.getLastAccessedAt(), FORMATTER);
+                return dtB.compareTo(dtA);
+            } catch (Exception e) {
+                return 0;
+            }
         }).collect(Collectors.toList());
     }
 

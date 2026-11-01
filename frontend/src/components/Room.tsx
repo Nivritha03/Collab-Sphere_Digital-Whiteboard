@@ -194,6 +194,14 @@ const Room = () => {
         if (!nameReady) return;
         connect(roomId);
 
+        // Ensure persistent membership is recorded in database for history tracking
+        try {
+            const currentUser = authService.getCurrentUser();
+            if (currentUser && currentUser.email) {
+                authService.joinRoom(roomId).catch(() => {});
+            }
+        } catch {}
+
         // Fetch version history & initial board snapshot
         const { apiUrl } = getBackendUrls();
         fetch(`${apiUrl}/api/version/${roomId}`)
