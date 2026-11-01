@@ -40,75 +40,126 @@ export const authService = {
     },
 
     async signUp(username: string, email: string, password: string, confirmPassword?: string): Promise<UserAuth> {
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanUsername = username.trim();
+
+        // Check if already registered locally
+        const existingUsers: Record<string, { password: string; username: string; color: string; email: string }> = 
+            JSON.parse(localStorage.getItem('collab_sphere_registered_users') || '{}');
+
         const { apiUrl } = getBackendUrls();
-        let res: Response;
         try {
-            res = await fetch(`${apiUrl}/api/auth/signup`, {
+            const res = await fetch(`${apiUrl}/api/auth/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password, confirmPassword }),
+                body: JSON.stringify({ username: cleanUsername, email: cleanEmail, password, confirmPassword }),
             });
-        } catch (fetchErr: any) {
-            throw new Error(`Cannot connect to server at ${apiUrl}. Please ensure the backend is running.`);
-        }
 
-        const rawText = await res.text();
-        let data: any = {};
-        try {
-            data = rawText ? JSON.parse(rawText) : {};
-        } catch {
-            data = { message: rawText };
-        }
+            const rawText = await res.text();
+            let data: any = {};
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch {
+                data = { message: rawText };
+            }
 
-        if (!res.ok) {
-            const errText = data.message || data.error;
-            throw new Error(errText || (res.status === 400 ? 'An account with this email already exists or invalid details.' : 'Failed to sign up'));
-        }
+            if (!res.ok) {
+                const errText = data.message || data.error;
+                throw new Error(errText || 'An account with this email already exists');
+            }
 
-        const authUser: UserAuth = {
-            token: data.token,
-            username: data.username,
-            email: data.email,
-            color: data.color,
-        };
-        this.setCurrentUser(authUser);
-        return authUser;
+            const authUser: UserAuth = {
+                token: data.token,
+                username: data.username,
+                email: data.email,
+                color: data.color || '#6366f1',
+            };
+            this.setCurrentUser(authUser);
+            existingUsers[cleanEmail] = { password, username: cleanUsername, color: authUser.color || '#6366f1', email: cleanEmail };
+            localStorage.setItem('collab_sphere_registered_users', JSON.stringify(existingUsers));
+            return authUser;
+        } catch (backendErr: any) {
+            // If backend explicitly rejected with duplicate email or validation error, re-throw that error
+            if (backendErr.message && !backendErr.message.includes('Cannot connect') && !backendErr.message.includes('Failed to fetch')) {
+                throw backendErr;
+            }
+
+            // Fallback for standalone / cloud Vercel deployments when backend is offline
+            if (existingUsers[cleanEmail]) {
+                throw new Error('An account with this email already exists. Please switch to Sign In.');
+            }
+
+            const fallbackUser: UserAuth = {
+                token: 'AUTH-LOCAL-' + Math.random().toString(36).substring(2),
+                username: cleanUsername,
+                email: cleanEmail,
+                color: '#6366f1',
+            };
+            existingUsers[cleanEmail] = { password, username: cleanUsername, color: fallbackUser.color || '#6366f1', email: cleanEmail };
+            localStorage.setItem('collab_sphere_registered_users', JSON.stringify(existingUsers));
+            this.setCurrentUser(fallbackUser);
+            return fallbackUser;
+        }
     },
 
     async signIn(email: string, password: string): Promise<UserAuth> {
+        const cleanEmail = email.trim().toLowerCase();
+        const existingUsers: Record<string, { password: string; username: string; color: string; email: string }> = 
+            JSON.parse(localStorage.getItem('collab_sphere_registered_users') || '{}');
+
         const { apiUrl } = getBackendUrls();
-        let res: Response;
         try {
-            res = await fetch(`${apiUrl}/api/auth/signin`, {
+            const res = await fetch(`${apiUrl}/api/auth/signin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email: cleanEmail, password }),
             });
-        } catch (fetchErr: any) {
-            throw new Error(`Cannot connect to server at ${apiUrl}. Please ensure the backend is running.`);
-        }
 
-        const rawText = await res.text();
-        let data: any = {};
-        try {
-            data = rawText ? JSON.parse(rawText) : {};
-        } catch {
-            data = { message: rawText };
-        }
+            const rawText = await res.text();
+            let data: any = {};
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch {
+                data = { message: rawText };
+            }
 
-        if (!res.ok) {
-            const errText = data.message || data.error;
-            throw new Error(errText || (res.status === 400 ? 'Invalid email or password' : 'Failed to sign in'));
-        }
+            if (!res.ok) {
+                const errText = data.message || data.error;
+                throw new Error(errText || 'Invalid email or password');
+            }
 
-        const authUser: UserAuth = {
-            token: data.token,
-            username: data.username,
-            email: data.email,
-            color: data.color,
-        };
-        this.setCurrentUser(authUser);
-        return authUser;
+            const authUser: UserAuth = {
+                token: data.token,
+                username: data.username,
+                email: data.email,
+                color: data.color || '#6366f1',
+            };
+            this.setCurrentUser(authUser);
+            return authUser;
+        } catch (backendErr: any) {
+            if (backendErr.message && !backendErr.message.includes('Cannot connect') && !backendErr.message.includes('Failed to fetch')) {
+                throw backendErr;
+            }
+
+            // Check local fallback accounts
+            const localRecord = existingUsers[cleanEmail];
+            if (localRecord) {
+                if (localRecord.password === password) {
+                    const localUser: UserAuth = {
+                        token: 'AUTH-LOCAL-' + Math.random().toString(36).substring(2),
+                        username: localRecord.username,
+                        email: cleanEmail,
+                        color: localRecord.color || '#6366f1',
+                    };
+                    this.setCurrentUser(localUser);
+                    return localUser;
+                } else {
+                    throw new Error('Invalid email or password');
+                }
+            }
+
+            throw new Error('Invalid email or password');
+        }
     },
 
     async createRoom(roomName: string, customCode?: string): Promise<{ code: string; name: string }> {
