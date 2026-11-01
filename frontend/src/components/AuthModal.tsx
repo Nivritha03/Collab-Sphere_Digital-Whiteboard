@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, User, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
+import { X, Mail, Lock, User, Sparkles, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../services/authService';
 import type { UserAuth } from '../services/authService';
 
@@ -21,6 +21,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -36,7 +39,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 if (!username.trim()) throw new Error('Please enter your full name or nickname.');
                 if (!email.trim() || !email.includes('@')) throw new Error('Please enter a valid email address.');
                 if (password.length < 6) throw new Error('Password must be at least 6 characters long.');
-                const user = await authService.signUp(username.trim(), email.trim(), password);
+                if (password !== confirmPassword) throw new Error('Passwords do not match. Please re-enter confirm password.');
+                const user = await authService.signUp(username.trim(), email.trim(), password, confirmPassword);
                 onSuccess(user);
                 onClose();
             } else {
@@ -161,23 +165,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             <div className="relative">
                                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     required
                                     placeholder="••••••••"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                                    title={showPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
                             </div>
                             {mode === 'signup' && (
                                 <p className="text-[11px] text-slate-400 mt-1">Must be at least 6 characters</p>
                             )}
                         </div>
 
+                        {mode === 'signup' && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                                    Confirm Password
+                                </label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        required
+                                        placeholder="••••••••"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                                        title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full mt-2 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-2xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60 text-sm"
+                            className="w-full mt-2 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-2xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60 text-sm cursor-pointer"
                         >
                             {loading ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -196,7 +235,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                     setMode(mode === 'signin' ? 'signup' : 'signin');
                                     setError(null);
                                 }}
-                                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer"
                             >
                                 {mode === 'signin'
                                     ? "Don't have an account yet? Sign up here"

@@ -39,14 +39,14 @@ export const authService = {
         localStorage.removeItem(AUTH_KEY);
     },
 
-    async signUp(username: string, email: string, password: string): Promise<UserAuth> {
+    async signUp(username: string, email: string, password: string, confirmPassword?: string): Promise<UserAuth> {
         const { apiUrl } = getBackendUrls();
         let res: Response;
         try {
             res = await fetch(`${apiUrl}/api/auth/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password }),
+                body: JSON.stringify({ username, email, password, confirmPassword }),
             });
         } catch (fetchErr: any) {
             throw new Error(`Cannot connect to server at ${apiUrl}. Please ensure the backend is running.`);

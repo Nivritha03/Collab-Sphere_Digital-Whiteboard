@@ -30,6 +30,9 @@ public class AuthService {
         if (req.getPassword() == null || req.getPassword().length() < 6) {
             throw new IllegalArgumentException("Password must be at least 6 characters long");
         }
+        if (req.getConfirmPassword() != null && !req.getPassword().equals(req.getConfirmPassword())) {
+            throw new IllegalArgumentException("Passwords do not match");
+        }
         if (req.getUsername() == null || req.getUsername().trim().isEmpty()) {
             throw new IllegalArgumentException("Username is required");
         }
