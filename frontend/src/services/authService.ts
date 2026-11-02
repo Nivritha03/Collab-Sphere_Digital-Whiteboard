@@ -65,7 +65,7 @@ export const authService = {
 
             // If server returned 500 (e.g. Vercel middleware invocation failure when no serverless function/backend exists)
             // or if the response is HTML rather than JSON, gracefully fall back to local account
-            if (res.status >= 500 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+            if (res.status >= 500 || res.status === 404 || res.status === 405 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html') || !res.headers.get('content-type')?.includes('application/json')) {
                 throw new Error('BACKEND_UNAVAILABLE_FALLBACK');
             }
 
@@ -148,7 +148,7 @@ export const authService = {
             }
 
             // If server returned 500 or HTML (e.g. Vercel backend proxy unavailable)
-            if (res.status >= 500 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+            if (res.status >= 500 || res.status === 404 || res.status === 405 || rawText.includes('MIDDLEWARE_INVOCATION_FAILED') || rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html') || !res.headers.get('content-type')?.includes('application/json')) {
                 throw new Error('BACKEND_UNAVAILABLE_FALLBACK');
             }
 
