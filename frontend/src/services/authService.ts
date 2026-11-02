@@ -37,6 +37,7 @@ export const authService = {
 
     clearCurrentUser(): void {
         localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem('collab_sphere_username');
     },
 
     async signUp(username: string, email: string, password: string, confirmPassword?: string): Promise<UserAuth> {

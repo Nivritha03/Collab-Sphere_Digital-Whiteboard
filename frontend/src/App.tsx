@@ -47,6 +47,7 @@ const Home = () => {
 
     const handleSignOut = () => {
         authService.clearCurrentUser();
+        setUserName('');
         setCurrentUser(null);
     };
 

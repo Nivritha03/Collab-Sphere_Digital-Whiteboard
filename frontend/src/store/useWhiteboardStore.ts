@@ -241,7 +241,11 @@ export const useWhiteboardStore = create<WhiteboardState>((set, get) => {
         setCurrentSize: (size) => set({ currentSize: size }),
         setUserName: (name) => {
             try {
-                if (name) localStorage.setItem('collab_sphere_username', name);
+                if (name && name.trim()) {
+                    localStorage.setItem('collab_sphere_username', name.trim());
+                } else {
+                    localStorage.removeItem('collab_sphere_username');
+                }
             } catch {}
             set({ userName: name });
         },
