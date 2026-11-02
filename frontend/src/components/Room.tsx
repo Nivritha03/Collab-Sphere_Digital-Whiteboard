@@ -116,7 +116,7 @@ const Room = () => {
         return false;
     });
     const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-    const [roomDetails, setRoomDetails] = useState<{ name: string; createdBy: string } | null>(null);
+    const [, setRoomDetails] = useState<{ name: string; createdBy: string } | null>(null);
 
     // Fetch room name and creator
     useEffect(() => {
@@ -346,19 +346,6 @@ const Room = () => {
                         <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Exit</span>
                     </motion.button>
 
-                    {/* Room Name & ID pill with copy */}
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-color)]/60 border border-[var(--border-color)] max-w-[105px] sm:max-w-[180px] shrink-0">
-                        <span className="text-[10px] sm:text-xs font-bold text-[var(--text-color)] truncate">
-                            {roomDetails?.name || (roomId ? `#${roomId.substring(0, Math.min(6, roomId.length))}` : 'Board')}
-                        </span>
-                        <button
-                            onClick={handleCopy}
-                            className="text-[var(--secondary-text)] hover:text-[var(--accent-primary)] p-0.5 transition-all shrink-0"
-                            title="Copy Room ID"
-                        >
-                            {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                        </button>
-                    </div>
                 </div>
 
                 {/* Right controls */}
