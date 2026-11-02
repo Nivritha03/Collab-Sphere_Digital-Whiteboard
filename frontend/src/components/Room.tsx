@@ -103,11 +103,15 @@ const Room = () => {
             if (authStr) {
                 const parsed = JSON.parse(authStr);
                 if (parsed.username) {
+                    setUserName(parsed.username);
                     return true;
                 }
             }
             const stored = localStorage.getItem('collab_sphere_username');
-            if (stored && stored.trim()) return true;
+            if (stored && stored.trim()) {
+                setUserName(stored.trim());
+                return true;
+            }
         } catch {}
         return false;
     });
